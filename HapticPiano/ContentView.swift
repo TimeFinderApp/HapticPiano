@@ -263,24 +263,24 @@ struct SharpKeyView: View {
 
 // Define the piano keys in the correct order
 let pianoKeys: [PianoKey] = [
-    PianoKey(note: "E2", frequency: 82.41, sharpness: 0.022, isSharp: false),
-    PianoKey(note: "F2", frequency: 87.31, sharpness: 0.085, isSharp: false),
-    PianoKey(note: "F#2", frequency: 92.50, sharpness: 0.144, isSharp: true),
-    PianoKey(note: "G2", frequency: 98.00, sharpness: 0.200, isSharp: false),
-    PianoKey(note: "G#2", frequency: 103.83, sharpness: 0.255, isSharp: true),
-    PianoKey(note: "A2", frequency: 110.00, sharpness: 0.309, isSharp: false),
-    PianoKey(note: "A#2", frequency: 116.54, sharpness: 0.362, isSharp: true),
-    PianoKey(note: "B2", frequency: 123.47, sharpness: 0.415, isSharp: false),
-    PianoKey(note: "C3", frequency: 130.81, sharpness: 0.468, isSharp: false),
-    PianoKey(note: "C#3", frequency: 138.59, sharpness: 0.520, isSharp: true),
-    PianoKey(note: "D3", frequency: 146.83, sharpness: 0.573, isSharp: false),
-    PianoKey(note: "D#3", frequency: 155.56, sharpness: 0.626, isSharp: true),
-    PianoKey(note: "E3", frequency: 164.81, sharpness: 0.680, isSharp: false),
-    PianoKey(note: "F3", frequency: 174.61, sharpness: 0.734, isSharp: false),
-    PianoKey(note: "F#3", frequency: 185.00, sharpness: 0.788, isSharp: true),
-    PianoKey(note: "G3", frequency: 196.00, sharpness: 0.844, isSharp: false),
-    PianoKey(note: "G#3", frequency: 207.65, sharpness: 0.900, isSharp: true),
-    PianoKey(note: "A3", frequency: 220.00, sharpness: 0.957, isSharp: false)
+    PianoKey(note: "E2", frequency: 82.41, sharpness: 0.032, isSharp: false),
+    PianoKey(note: "F2", frequency: 87.31, sharpness: 0.092, isSharp: false),
+    PianoKey(note: "F#2", frequency: 92.50, sharpness: 0.149, isSharp: true),
+    PianoKey(note: "G2", frequency: 98.00, sharpness: 0.204, isSharp: false),
+    PianoKey(note: "G#2", frequency: 103.83, sharpness: 0.258, isSharp: true),
+    PianoKey(note: "A2", frequency: 110.00, sharpness: 0.312, isSharp: false),
+    PianoKey(note: "A#2", frequency: 116.54, sharpness: 0.365, isSharp: true),
+    PianoKey(note: "B2", frequency: 123.47, sharpness: 0.418, isSharp: false),
+    PianoKey(note: "C3", frequency: 130.81, sharpness: 0.471, isSharp: false),
+    PianoKey(note: "C#3", frequency: 138.59, sharpness: 0.523, isSharp: true),
+    PianoKey(note: "D3", frequency: 146.83, sharpness: 0.576, isSharp: false),
+    PianoKey(note: "D#3", frequency: 155.56, sharpness: 0.629, isSharp: true),
+    PianoKey(note: "E3", frequency: 164.81, sharpness: 0.683, isSharp: false),
+    PianoKey(note: "F3", frequency: 174.61, sharpness: 0.737, isSharp: false),
+    PianoKey(note: "F#3", frequency: 185.00, sharpness: 0.791, isSharp: true),
+    PianoKey(note: "G3", frequency: 196.00, sharpness: 0.847, isSharp: false),
+    PianoKey(note: "G#3", frequency: 207.65, sharpness: 0.903, isSharp: true),
+    PianoKey(note: "A3", frequency: 220.00, sharpness: 0.960, isSharp: false)
 ]
 
 struct PianoKey: Identifiable, Equatable {
