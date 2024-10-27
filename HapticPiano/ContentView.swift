@@ -223,7 +223,7 @@ struct SharpKeyView: View {
         guard let engine = engine else { return }
         let intensity = CHHapticEventParameter(parameterID: .hapticIntensity, value: 1.0)
         let sharpnessParam = CHHapticEventParameter(parameterID: .hapticSharpness, value: Float(key.sharpness))
-        let event = CHHapticEvent(eventType: .hapticContinuous, parameters: [intensity, sharpnessParam], relativeTime: 0, duration: 0.1)
+        let event = CHHapticEvent(eventType: .hapticContinuous, parameters: [intensity, sharpnessParam], relativeTime: 0, duration: 100)
 
         do {
             let pattern = try CHHapticPattern(events: [event], parameters: [])
