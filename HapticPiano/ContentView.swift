@@ -103,7 +103,7 @@ struct KeyboardView: View {
               let leftIndex = whiteKeys.firstIndex(of: leftWhiteKey) else { return nil }
 
         let keyWidth = whiteKeyWidth(totalWidth: totalWidth)
-        let position = (CGFloat(leftIndex) + 0.75) * keyWidth
+        let position = (CGFloat(leftIndex) + 1) * keyWidth
         return position
     }
 
