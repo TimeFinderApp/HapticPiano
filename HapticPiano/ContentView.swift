@@ -32,7 +32,7 @@ struct KeyboardView: View {
                 // White keys
                 HStack(spacing: 0) {
                     ForEach(whiteKeys) { key in
-                        PianoKeyView(key: key, isBlackKey: false, pressedKeys: $pressedKeys)
+                        PianoKeyView(key: key,pressedKeys: $pressedKeys)
                             .frame(width: whiteKeyWidth(totalWidth: totalWidth), height: totalHeight)
                     }
                 }
@@ -121,33 +121,41 @@ struct KeyboardView: View {
         }
     }
 }
-
 struct PianoKeyView: View {
     let key: PianoKey
-    let isBlackKey: Bool
     @Binding var pressedKeys: Set<PianoKey>
-    @State private var isPlayingSound = false
     @State private var engine: CHHapticEngine?
     @State private var player: CHHapticAdvancedPatternPlayer?
 
     var body: some View {
+        let isPressed = pressedKeys.contains(key)
+
         Rectangle()
-            .fill(pressedKeys.contains(key) ? Color.white.opacity(0.6) : Color.white)
+            .fill(isPressed ? Color.white.opacity(0.6) : Color.white)
             .border(Color.black, width: 1)
-            .onChange(of: pressedKeys) { newPressedKeys in
-                let isPressed = newPressedKeys.contains(key)
-                if isPressed && !isPlayingSound {
-                    playHaptic(for: key)
-                    playSound(for: key)
-                    isPlayingSound = true
-                } else if !isPressed && isPlayingSound {
-                    stopHaptic()
-                    stopSound()
-                    isPlayingSound = false
-                }
-            }
             .onAppear {
                 prepareHaptics()
+                if isPressed {
+                    playHaptic(for: key)
+                    playSound(for: key)
+                }
+            }
+            .onChange(of: isPressed) { newValue in
+                if newValue {
+                    playHaptic(for: key)
+                    playSound(for: key)
+                } else {
+                    stopHaptic()
+                    stopSound()
+                }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
+                // Restart the haptic engine when the app enters the foreground
+                prepareHaptics()
+            }
+            .onReceive(NotificationCenter.default.publisher(for: UIApplication.didEnterBackgroundNotification)) { _ in
+                // Stop the haptic engine when the app enters the background
+                engine?.stop(completionHandler: nil)
             }
     }
 
@@ -156,6 +164,17 @@ struct PianoKeyView: View {
         guard CHHapticEngine.capabilitiesForHardware().supportsHaptics else { return }
         do {
             engine = try CHHapticEngine()
+            
+            // Set up the reset handler
+            engine?.resetHandler = {
+                // Restart the engine if necessary
+                do {
+                    try self.engine?.start()
+                } catch {
+                    print("Failed to restart the haptic engine: \(error.localizedDescription)")
+                }
+            }
+            
             try engine?.start()
         } catch {
             print("Failed to create the haptic engine: \(error.localizedDescription)")
@@ -199,31 +218,40 @@ struct PianoKeyView: View {
         print("Stopping sound")
     }
 }
-
 struct SharpKeyView: View {
     let key: PianoKey
     @Binding var pressedKeys: Set<PianoKey>
-    @State private var isPlayingSound = false
     @State private var engine: CHHapticEngine?
     @State private var player: CHHapticAdvancedPatternPlayer?
 
     var body: some View {
+        let isPressed = pressedKeys.contains(key)
+
         Rectangle()
-            .fill(pressedKeys.contains(key) ? Color.black.opacity(0.6) : Color.black)
-            .onChange(of: pressedKeys) { newPressedKeys in
-                let isPressed = newPressedKeys.contains(key)
-                if isPressed && !isPlayingSound {
-                    playHaptic(for: key)
-                    playSound(for: key)
-                    isPlayingSound = true
-                } else if !isPressed && isPlayingSound {
-                    stopHaptic()
-                    stopSound()
-                    isPlayingSound = false
-                }
-            }
+            .fill(isPressed ? Color.black.opacity(0.6) : Color.black)
             .onAppear {
                 prepareHaptics()
+                if isPressed {
+                    playHaptic(for: key)
+                    playSound(for: key)
+                }
+            }
+            .onChange(of: isPressed) { newValue in
+                if newValue {
+                    playHaptic(for: key)
+                    playSound(for: key)
+                } else {
+                    stopHaptic()
+                    stopSound()
+                }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
+                // Restart the haptic engine when the app enters the foreground
+                prepareHaptics()
+            }
+            .onReceive(NotificationCenter.default.publisher(for: UIApplication.didEnterBackgroundNotification)) { _ in
+                // Stop the haptic engine when the app enters the background
+                engine?.stop(completionHandler: nil)
             }
     }
 
@@ -232,11 +260,23 @@ struct SharpKeyView: View {
         guard CHHapticEngine.capabilitiesForHardware().supportsHaptics else { return }
         do {
             engine = try CHHapticEngine()
+            
+            // Set up the reset handler
+            engine?.resetHandler = {
+                // Restart the engine if necessary
+                do {
+                    try self.engine?.start()
+                } catch {
+                    print("Failed to restart the haptic engine: \(error.localizedDescription)")
+                }
+            }
+            
             try engine?.start()
         } catch {
             print("Failed to create the haptic engine: \(error.localizedDescription)")
         }
     }
+
 
     // Play haptic feedback for key
     func playHaptic(for key: PianoKey) {
