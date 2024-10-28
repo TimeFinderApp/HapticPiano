@@ -21,56 +21,92 @@ struct ContentView: View {
 struct KeyboardView: View {
     let keys: [PianoKey]
     
+    @State private var pressedKeys: Set<PianoKey> = []
+    
     var body: some View {
         GeometryReader { geometry in
+            let totalWidth = geometry.size.width
+            let totalHeight = geometry.size.height
+            
             ZStack(alignment: .leading) {
                 // White keys
                 HStack(spacing: 0) {
                     ForEach(whiteKeys) { key in
-                        PianoKeyView(key: key, isBlackKey: false)
-                            .frame(width: whiteKeyWidth(in: geometry), height: geometry.size.height)
+                        PianoKeyView(key: key, isBlackKey: false, pressedKeys: $pressedKeys)
+                            .frame(width: whiteKeyWidth(totalWidth: totalWidth), height: totalHeight)
                     }
                 }
                 // Black keys
                 ForEach(blackKeys) { key in
-                    if let position = blackKeyPosition(key: key, in: geometry) {
-                        SharpKeyView(key: key)
-                            .frame(width: blackKeyWidth(in: geometry), height: geometry.size.height * 0.6)
-                            .position(x: position, y: geometry.size.height * 0.3)
+                    if let position = blackKeyPosition(key: key, totalWidth: totalWidth) {
+                        SharpKeyView(key: key, pressedKeys: $pressedKeys)
+                            .frame(width: blackKeyWidth(totalWidth: totalWidth), height: totalHeight * 0.6)
+                            .position(x: position, y: totalHeight * 0.3)
                     }
                 }
             }
+            .overlay(
+                MultiTouchView { touchPoints in
+                    DispatchQueue.main.async {
+                        self.pressedKeys = Set(touchPoints.compactMap { point in
+                            self.keyAt(location: point, totalWidth: totalWidth, totalHeight: totalHeight)
+                        })
+                    }
+                }
+            )
         }
     }
-    
+
+    // Find which key corresponds to the touch location
+    func keyAt(location: CGPoint, totalWidth: CGFloat, totalHeight: CGFloat) -> PianoKey? {
+        let whiteKeyWidth = totalWidth / CGFloat(whiteKeys.count)
+
+        // Check if touch is on black keys first
+        for key in blackKeys {
+            if let position = blackKeyPosition(key: key, totalWidth: totalWidth),
+               abs(location.x - position) < blackKeyWidth(totalWidth: totalWidth) / 2,
+               location.y < totalHeight * 0.6 {
+                return key
+            }
+        }
+
+        // Touch is on white keys
+        let whiteIndex = Int(location.x / whiteKeyWidth)
+        if whiteIndex < whiteKeys.count {
+            return whiteKeys[whiteIndex]
+        }
+
+        return nil
+    }
+
     // Separate white and black keys for easier processing
     var whiteKeys: [PianoKey] {
         keys.filter { !$0.isSharp }
     }
-    
+
     var blackKeys: [PianoKey] {
         keys.filter { $0.isSharp }
     }
-    
+
     // Calculate widths
-    func whiteKeyWidth(in geometry: GeometryProxy) -> CGFloat {
-        geometry.size.width / CGFloat(whiteKeys.count)
+    func whiteKeyWidth(totalWidth: CGFloat) -> CGFloat {
+        totalWidth / CGFloat(whiteKeys.count)
     }
-    
-    func blackKeyWidth(in geometry: GeometryProxy) -> CGFloat {
-        whiteKeyWidth(in: geometry) * 0.6
+
+    func blackKeyWidth(totalWidth: CGFloat) -> CGFloat {
+        whiteKeyWidth(totalWidth: totalWidth) * 0.6
     }
-    
-    // Calculate black key positions
-    func blackKeyPosition(key: PianoKey, in geometry: GeometryProxy) -> CGFloat? {
+
+    // Adjusted black key positions to center them between white keys
+    func blackKeyPosition(key: PianoKey, totalWidth: CGFloat) -> CGFloat? {
         guard let leftWhiteKey = leftWhiteKey(for: key),
               let leftIndex = whiteKeys.firstIndex(of: leftWhiteKey) else { return nil }
-        
-        let keyWidth = whiteKeyWidth(in: geometry)
-        let position = CGFloat(leftIndex) * keyWidth + keyWidth * 0.75
+
+        let keyWidth = whiteKeyWidth(totalWidth: totalWidth)
+        let position = (CGFloat(leftIndex) + 0.75) * keyWidth
         return position
     }
-    
+
     // Map black keys to their corresponding left white keys
     func leftWhiteKey(for blackKey: PianoKey) -> PianoKey? {
         switch blackKey.note {
@@ -89,37 +125,32 @@ struct KeyboardView: View {
 struct PianoKeyView: View {
     let key: PianoKey
     let isBlackKey: Bool
-    @State private var isPressed = false
+    @Binding var pressedKeys: Set<PianoKey>
+    @State private var isPlayingSound = false
     @State private var engine: CHHapticEngine?
     @State private var player: CHHapticAdvancedPatternPlayer?
-    
+
     var body: some View {
         Rectangle()
-            .fill(isPressed ? Color.white.opacity(0.6) : Color.white)
+            .fill(pressedKeys.contains(key) ? Color.white.opacity(0.6) : Color.white)
             .border(Color.black, width: 1)
-            .gesture(
-                DragGesture(minimumDistance: 0)
-                    .onChanged { _ in
-                        if !isPressed {
-                            isPressed = true
-                            prepareHaptics()
-                            playHaptic(for: key)
-                        }
-                    }
-                    .onEnded { _ in
-                        isPressed = false
-                        stopHaptic()
-                    }
-            )
+            .onChange(of: pressedKeys) { newPressedKeys in
+                let isPressed = newPressedKeys.contains(key)
+                if isPressed && !isPlayingSound {
+                    playHaptic(for: key)
+                    playSound(for: key)
+                    isPlayingSound = true
+                } else if !isPressed && isPlayingSound {
+                    stopHaptic()
+                    stopSound()
+                    isPlayingSound = false
+                }
+            }
             .onAppear {
                 prepareHaptics()
-                setupNotificationObservers()
-            }
-            .onDisappear {
-                removeNotificationObservers()
             }
     }
-    
+
     // Prepare and create haptic engine
     func prepareHaptics() {
         guard CHHapticEngine.capabilitiesForHardware().supportsHaptics else { return }
@@ -136,7 +167,8 @@ struct PianoKeyView: View {
         guard let engine = engine else { return }
         let intensity = CHHapticEventParameter(parameterID: .hapticIntensity, value: 1.0)
         let sharpnessParam = CHHapticEventParameter(parameterID: .hapticSharpness, value: Float(key.sharpness))
-        let event = CHHapticEvent(eventType: .hapticContinuous, parameters: [intensity, sharpnessParam], relativeTime: 0, duration: 100)
+        // Increase duration to ensure the haptic feedback continues while the key is pressed
+        let event = CHHapticEvent(eventType: .hapticContinuous, parameters: [intensity, sharpnessParam], relativeTime: 0, duration: 100.0)
 
         do {
             let pattern = try CHHapticPattern(events: [event], parameters: [])
@@ -156,57 +188,45 @@ struct PianoKeyView: View {
             print("Failed to stop haptic: \(error.localizedDescription)")
         }
     }
-    
-    // Setup notification observers for app lifecycle
-    func setupNotificationObservers() {
-        NotificationCenter.default.addObserver(forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main) { _ in
-            prepareHaptics() // Recreate haptic engine when app becomes active
-        }
-        NotificationCenter.default.addObserver(forName: UIApplication.didEnterBackgroundNotification, object: nil, queue: .main) { _ in
-            stopHaptic() // Stop haptic engine when app enters background
-        }
+
+    // Function to simulate playing a sound when a key is pressed
+    func playSound(for key: PianoKey) {
+        print("Playing sound for \(key.note)")
     }
-    
-    // Remove notification observers
-    func removeNotificationObservers() {
-        NotificationCenter.default.removeObserver(self, name: UIApplication.didBecomeActiveNotification, object: nil)
-        NotificationCenter.default.removeObserver(self, name: UIApplication.didEnterBackgroundNotification, object: nil)
+
+    // Function to simulate stopping a sound when a key is released
+    func stopSound() {
+        print("Stopping sound")
     }
 }
 
 struct SharpKeyView: View {
     let key: PianoKey
-    @State private var isPressed = false
+    @Binding var pressedKeys: Set<PianoKey>
+    @State private var isPlayingSound = false
     @State private var engine: CHHapticEngine?
     @State private var player: CHHapticAdvancedPatternPlayer?
-    
+
     var body: some View {
         Rectangle()
-            .fill(isPressed ? Color.black.opacity(0.6) : Color.black)
-            .gesture(
-                DragGesture(minimumDistance: 0)
-                    .onChanged { _ in
-                        if !isPressed {
-                            isPressed = true
-                            prepareHaptics()
-                            playHaptic(for: key)
-                        }
-                    }
-                    .onEnded { _ in
-                        isPressed = false
-                        stopHaptic()
-                    }
-            )
-            .zIndex(1)
+            .fill(pressedKeys.contains(key) ? Color.black.opacity(0.6) : Color.black)
+            .onChange(of: pressedKeys) { newPressedKeys in
+                let isPressed = newPressedKeys.contains(key)
+                if isPressed && !isPlayingSound {
+                    playHaptic(for: key)
+                    playSound(for: key)
+                    isPlayingSound = true
+                } else if !isPressed && isPlayingSound {
+                    stopHaptic()
+                    stopSound()
+                    isPlayingSound = false
+                }
+            }
             .onAppear {
                 prepareHaptics()
-                setupNotificationObservers()
-            }
-            .onDisappear {
-                removeNotificationObservers()
             }
     }
-    
+
     // Prepare and create haptic engine
     func prepareHaptics() {
         guard CHHapticEngine.capabilitiesForHardware().supportsHaptics else { return }
@@ -223,7 +243,8 @@ struct SharpKeyView: View {
         guard let engine = engine else { return }
         let intensity = CHHapticEventParameter(parameterID: .hapticIntensity, value: 1.0)
         let sharpnessParam = CHHapticEventParameter(parameterID: .hapticSharpness, value: Float(key.sharpness))
-        let event = CHHapticEvent(eventType: .hapticContinuous, parameters: [intensity, sharpnessParam], relativeTime: 0, duration: 100)
+        // Increase duration to ensure the haptic feedback continues while the key is pressed
+        let event = CHHapticEvent(eventType: .hapticContinuous, parameters: [intensity, sharpnessParam], relativeTime: 0, duration: 100.0)
 
         do {
             let pattern = try CHHapticPattern(events: [event], parameters: [])
@@ -243,21 +264,15 @@ struct SharpKeyView: View {
             print("Failed to stop haptic: \(error.localizedDescription)")
         }
     }
-    
-    // Setup notification observers for app lifecycle
-    func setupNotificationObservers() {
-        NotificationCenter.default.addObserver(forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main) { _ in
-            prepareHaptics() // Recreate haptic engine when app becomes active
-        }
-        NotificationCenter.default.addObserver(forName: UIApplication.didEnterBackgroundNotification, object: nil, queue: .main) { _ in
-            stopHaptic() // Stop haptic engine when app enters background
-        }
+
+    // Function to simulate playing a sound when a key is pressed
+    func playSound(for key: PianoKey) {
+        print("Playing sound for \(key.note)")
     }
-    
-    // Remove notification observers
-    func removeNotificationObservers() {
-        NotificationCenter.default.removeObserver(self, name: UIApplication.didBecomeActiveNotification, object: nil)
-        NotificationCenter.default.removeObserver(self, name: UIApplication.didEnterBackgroundNotification, object: nil)
+
+    // Function to simulate stopping a sound when a key is released
+    func stopSound() {
+        print("Stopping sound")
     }
 }
 
@@ -283,17 +298,85 @@ let pianoKeys: [PianoKey] = [
     PianoKey(note: "A3", frequency: 220.00, sharpness: 0.960, isSharp: false)
 ]
 
-struct PianoKey: Identifiable, Equatable {
-    let id = UUID()
+struct PianoKey: Identifiable {
+    let id = UUID() // Optional: you can remove 'id' if not needed
     let note: String
     let frequency: Double
     let sharpness: Double
     let isSharp: Bool
 }
 
-// Implement Equatable conformance to compare PianoKey instances
-extension PianoKey {
+// Implement Equatable and Hashable based on 'note'
+extension PianoKey: Equatable, Hashable {
     static func == (lhs: PianoKey, rhs: PianoKey) -> Bool {
-        lhs.id == rhs.id
+        return lhs.note == rhs.note
+    }
+
+    func hash(into hasher: inout Hasher) {
+        hasher.combine(note)
+    }
+}
+
+// UIViewRepresentable to handle multi-touch
+struct MultiTouchView: UIViewRepresentable {
+    var touchHandler: ([CGPoint]) -> Void
+
+    func makeUIView(context: Context) -> TouchReportingView {
+        let view = TouchReportingView()
+        view.touchHandler = touchHandler
+        return view
+    }
+
+    func updateUIView(_ uiView: TouchReportingView, context: Context) {
+        uiView.touchHandler = touchHandler
+    }
+}
+class TouchReportingView: UIView {
+    var touchHandler: (([CGPoint]) -> Void)?
+    private var activeTouches: [UITouch: CGPoint] = [:]
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        isMultipleTouchEnabled = true
+        backgroundColor = .clear
+    }
+
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        isMultipleTouchEnabled = true
+        backgroundColor = .clear
+    }
+
+    override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
+        for touch in touches {
+            activeTouches[touch] = touch.location(in: self)
+        }
+        reportActiveTouches()
+    }
+
+    override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent?) {
+        for touch in touches {
+            activeTouches[touch] = touch.location(in: self)
+        }
+        reportActiveTouches()
+    }
+
+    override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
+        for touch in touches {
+            activeTouches.removeValue(forKey: touch)
+        }
+        reportActiveTouches()
+    }
+
+    override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent?) {
+        for touch in touches {
+            activeTouches.removeValue(forKey: touch)
+        }
+        reportActiveTouches()
+    }
+
+    private func reportActiveTouches() {
+        let points = Array(activeTouches.values)
+        touchHandler?(points)
     }
 }
